@@ -7,9 +7,12 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 
+// It is not possible in C to pass an array by value.
 int tun_alloc(char *dev) {
     struct ifreq ifr;
+    struct sockaddr ifaddr;
     int fd, err;
+    char address[9] = "10.0.0.1";
 
     if ((fd = open("/dev/net/tun", O_RDWR)) < 0) {
         printf("Error while opening tap device: %d\n", fd);
@@ -24,7 +27,14 @@ int tun_alloc(char *dev) {
      *
      *        IFF_NO_PI - Do not provide packet information
      */
+    // @todo use: "$ ip addr add 10.0.0.1/24 dev tap0" because auto assign is not working
+    strcpy(address, ifaddr.sa_data); // Array is not assignable because address = address[0]
+    ifaddr.sa_family = AF_INET;
+    ifr.ifr_addr = ifaddr;
+    ifr.ifr_broadaddr = ifaddr;
+    ifr.ifr_netmask = ifaddr;
     ifr.ifr_flags = IFF_TAP;
+    // * is dereference operator. Ir returns value behind a pointer
     if (*dev) {
         strncpy(ifr.ifr_name, dev, IFNAMSIZ);
     }
@@ -42,6 +52,7 @@ int tun_alloc(char *dev) {
 }
 
 int main() {
+    // malloc or calloc is used only forming array in a runtime (when we don't know a size in compile time)
     char if_name[IFNAMSIZ] = "tap0";
 
     tun_alloc(if_name);
