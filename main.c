@@ -15,6 +15,15 @@
 #include <sys/un.h>
 #include <arpa/inet.h>
 
+typedef struct {
+    unsigned long   destination : 48;
+    short pad0;
+    unsigned long   source      : 48;
+    short pad1;
+//    short  type;
+//    char payload[28];
+} ethernet;
+
 // It is not possible in C to pass an array by value.
 int tun_alloc(char *dev) {
     struct ifreq ifr;
@@ -33,7 +42,7 @@ int tun_alloc(char *dev) {
      *
      *        IFF_NO_PI - Do not provide packet information
      */
-    ifr.ifr_flags = IFF_TAP;
+    ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
     // * is dereference operator. Ir returns value behind a pointer
     if (*dev) {
         strncpy(ifr.ifr_name, dev, IFNAMSIZ);
@@ -95,16 +104,25 @@ int main() {
     char if_name[IFNAMSIZ] = "tap0";
     char address[9] = "10.0.0.1";
     char subnet_mask[14] = "255.255.255.0";
-    char buffer[2000];
+    char buffer[1500];
     int fd, nread;
+    ethernet arp_packet;
 
     fd = tun_alloc(if_name);
     tun_config(if_name, address, subnet_mask);
 
     while (1) {
-        nread = read(fd, buffer, 2000);
+        nread = read(fd, buffer, 1500); // MTU = 1500
         printf("Read bytes: %d\n", nread);
-        // freeze program
+
+        if (nread == 42) {
+            printf("---------------\n");
+            arp_packet = *(ethernet*)buffer;
+            printf("Dst: %ld\n", arp_packet.destination);
+            printf("Src: %ld\n", arp_packet.source);
+//            printf("Type: %d\n", arp_packet.type);
+            printf("---------------\n");
+        }
     }
     return 0;
 }
