@@ -14,14 +14,14 @@
 #include <netinet/in.h>
 #include <sys/un.h>
 #include <arpa/inet.h>
+#include <net/ethernet.h>
+#include <net/if_arp.h>
 
+// Unused for now
 typedef struct {
-    unsigned long   destination : 48;
-    short pad0;
-    unsigned long   source      : 48;
-    short pad1;
-//    short  type;
-//    char payload[28];
+    char dst[6];
+    char src[6];
+    u_int16_t type;
 } ethernet;
 
 // It is not possible in C to pass an array by value.
@@ -106,22 +106,34 @@ int main() {
     char subnet_mask[14] = "255.255.255.0";
     char buffer[1500];
     int fd, nread;
-    ethernet arp_packet;
+//    ethernet arp_packet;
+    struct ether_header ether_dgram;
+    struct arphdr arp_header;
 
     fd = tun_alloc(if_name);
     tun_config(if_name, address, subnet_mask);
 
     while (1) {
         nread = read(fd, buffer, 1500); // MTU = 1500
+        ether_dgram = *(struct ether_header*)buffer;
         printf("Read bytes: %d\n", nread);
 
-        if (nread == 42) {
-            printf("---------------\n");
-            arp_packet = *(ethernet*)buffer;
-            printf("Dst: %ld\n", arp_packet.destination);
-            printf("Src: %ld\n", arp_packet.source);
-//            printf("Type: %d\n", arp_packet.type);
-            printf("---------------\n");
+        // htons(arp_packet.ether_type) - convert to network byte order
+        if (htons(ether_dgram.ether_type) == ETHERTYPE_ARP) {
+            arp_header = *(struct arphdr*)&buffer[sizeof(ether_dgram)]; // @todo why needed &?
+            if (htons(arp_header.ar_op) == ARPOP_REQUEST) {
+                printf("---------------\n");
+                printf("ARP request\n");
+                printf("Protocol type: %d\n", htons(arp_header.ar_pro));
+//                printf("Dst: %d\n", arp_packet.ether_dhost);
+//                printf("Src: %d\n", arp_packet.ether_shost);
+//                printf("Pointer: %p\n", (void*)&buffer[14]);
+                printf("---------------\n");
+            }
+        }
+
+        if (nread == 5000) { // Impossible. Just to relax IDE...
+            return 0;
         }
     }
     return 0;
