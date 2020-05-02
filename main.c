@@ -94,9 +94,31 @@ int tun_config(char *dev, char *address, char *subnet_mask) {
     }
 
     printf("Interface configured.\n");
-    close(sd);
 
-    return 0;
+    return sd;
+}
+
+int get_mtu(int sd) {
+    struct ifreq ifr;
+
+    if (ioctl(sd, SIOCGIFMTU, &ifr) < 0) {
+        printf("SIOCGIFMTU error: %s\n", strerror(errno));
+        return -1;
+    }
+
+    return ifr.ifr_mtu;
+}
+
+char get_mac(int sd) {
+    struct ifreq ifr;
+
+    if (ioctl(sd, SIOCGIFHWADDR, &ifr) < 0) {
+        printf("SIOCGIFHWADDR error: %s\n", strerror(errno));
+    }
+
+    printf("String: %s\n", ifr.ifr_hwaddr.sa_data);
+
+    return *ifr.ifr_hwaddr.sa_data;
 }
 
 int main() {
@@ -104,37 +126,69 @@ int main() {
     char if_name[IFNAMSIZ] = "tap0";
     char address[9] = "10.0.0.1";
     char subnet_mask[14] = "255.255.255.0";
-    char buffer[1500];
-    int fd, nread;
+    char buffer[1500], mac;
+    int fd, sd, mtu, nread, response_size;
 //    ethernet arp_packet;
-    struct ether_header ether_dgram;
-    struct arphdr arp_header;
+    struct ether_header recv_ether_dgram, resp_ether_dgram;
+    struct arphdr recv_arp_header, resp_arp_header;
 
     fd = tun_alloc(if_name);
-    tun_config(if_name, address, subnet_mask);
+    sd = tun_config(if_name, address, subnet_mask);
+    mtu = get_mtu(sd);
+    mac = get_mac(sd);
+    close(sd);
 
     while (1) {
-        nread = read(fd, buffer, 1500); // MTU = 1500
-        ether_dgram = *(struct ether_header*)buffer;
+        nread = read(fd, buffer, mtu); // MTU = 1500
+        recv_ether_dgram = *(struct ether_header*)buffer;
         printf("Read bytes: %d\n", nread);
 
         // htons(arp_packet.ether_type) - convert to network byte order
-        if (htons(ether_dgram.ether_type) == ETHERTYPE_ARP) {
-            arp_header = *(struct arphdr*)&buffer[sizeof(ether_dgram)]; // @todo why needed &?
-            if (htons(arp_header.ar_op) == ARPOP_REQUEST) {
+        if (htons(recv_ether_dgram.ether_type) == ETHERTYPE_ARP) {
+            recv_arp_header = *(struct arphdr*)&buffer[sizeof(recv_ether_dgram)]; // @todo why needed &?
+            if (htons(recv_arp_header.ar_op) == ARPOP_REQUEST) {
                 printf("---------------\n");
                 printf("ARP request\n");
-                printf("Protocol type: %d\n", htons(arp_header.ar_pro));
+                printf("Protocol type: %d\n", htons(recv_arp_header.ar_pro));
+
+                // Create Ethernet part
+                strcpy((char*)resp_ether_dgram.ether_dhost, (char*)recv_ether_dgram.ether_shost);
+                strcpy((char*)resp_ether_dgram.ether_shost, &mac);
+                resp_ether_dgram.ether_type = htons(ETHERTYPE_ARP);
+
+                // Create ARP part
+                resp_arp_header.ar_hrd = ARPHRD_ETHER;
+                resp_arp_header.ar_pro = 0x0800;
+                resp_arp_header.ar_hln = ETH_ALEN;
+                resp_arp_header.ar_pln = 4;
+                resp_arp_header.ar_op = ARPOP_REPLY;
+
+                // Concat Ethernet headers with ARP
+                response_size = sizeof(resp_ether_dgram);// + sizeof(resp_arp_header) + 1;
+                char *response = (char*)malloc(response_size);
+                strcpy(response, (char*)&resp_ether_dgram);
+//                strcat(response, (char*)&resp_arp_header);
+
+                // Successful: write(fd, &resp_ether_dgram, sizeof(resp_ether_dgram))
+                write(fd, &resp_ether_dgram, sizeof(resp_ether_dgram));
+//                if (write(fd, &response, response_size) < 0) {
+//                    printf("Writing to descriptor failed\n");
+//                } else {
+//                    printf("Writing to descriptor successful\n");
+//                }
 //                printf("Dst: %d\n", arp_packet.ether_dhost);
 //                printf("Src: %d\n", arp_packet.ether_shost);
 //                printf("Pointer: %p\n", (void*)&buffer[14]);
                 printf("---------------\n");
+
+                free(response);
             }
         }
 
         if (nread == 5000) { // Impossible. Just to relax IDE...
-            return 0;
+            break;
         }
     }
+
     return 0;
 }
