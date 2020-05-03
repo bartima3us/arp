@@ -17,13 +17,6 @@
 #include <net/ethernet.h>
 #include <net/if_arp.h>
 
-// Unused for now
-typedef struct {
-    char dst[6];
-    char src[6];
-    u_int16_t type;
-} ethernet;
-
 // It is not possible in C to pass an array by value.
 int tun_alloc(char *dev) {
     struct ifreq ifr;
@@ -127,7 +120,8 @@ int main() {
     char address[9] = "10.0.0.1";
     char subnet_mask[14] = "255.255.255.0";
     char buffer[1500], mac;
-    int fd, sd, mtu, nread, response_size;
+    int fd, sd, mtu, nread;
+    size_t response_size;
 //    ethernet arp_packet;
     struct ether_header recv_ether_dgram, resp_ether_dgram;
     struct arphdr recv_arp_header, resp_arp_header;
@@ -155,33 +149,50 @@ int main() {
                 strcpy((char*)resp_ether_dgram.ether_dhost, (char*)recv_ether_dgram.ether_shost);
                 strcpy((char*)resp_ether_dgram.ether_shost, &mac);
                 resp_ether_dgram.ether_type = htons(ETHERTYPE_ARP);
+                size_t eth_dgram_size = sizeof(resp_ether_dgram);
 
-                // Create ARP part
-                resp_arp_header.ar_hrd = ARPHRD_ETHER;
-                resp_arp_header.ar_pro = 0x0800;
+                // Create ARP fixed part
+                resp_arp_header.ar_hrd = htons(ARPHRD_ETHER);
+                resp_arp_header.ar_pro = htons(0x0800);
                 resp_arp_header.ar_hln = ETH_ALEN;
                 resp_arp_header.ar_pln = 4;
-                resp_arp_header.ar_op = ARPOP_REPLY;
+                resp_arp_header.ar_op = htons(ARPOP_REPLY);
+                size_t arp_fixed_part_size = sizeof(resp_arp_header);
+
+                // Create ARP dynamic part
+                // Sender hardware address (ETH_ALEN) + Sender IP address (4) + Target hardware address (ETH_ALEN) + Target IP address (4) + NULL (1)
+                unsigned char arp_hw_addr[ETH_ALEN + ETH_ALEN + 9]; //= "11111122223333334444";
+//                strcpy((char*)arp_hw_addr, &mac);
+                strcpy((char*)arp_hw_addr, "111111");
+                strcat((char*)arp_hw_addr, "2222");
+                strcat((char*)arp_hw_addr, "555555");
+                strcat((char*)arp_hw_addr, "4444");
+//                strcat(*arp_hw_addr, mac);
+                size_t arp_dynamic_part_size = sizeof(arp_hw_addr) - 1; // Remove NULL
 
                 // Concat Ethernet headers with ARP
-                response_size = sizeof(resp_ether_dgram);// + sizeof(resp_arp_header) + 1;
-                char *response = (char*)malloc(response_size);
-                strcpy(response, (char*)&resp_ether_dgram);
+                response_size = eth_dgram_size + arp_fixed_part_size + arp_dynamic_part_size;
+//                char *response = (char*)malloc(response_size);
+//                strcpy(response, (char*)&resp_ether_dgram);
 //                strcat(response, (char*)&resp_arp_header);
+                char response[response_size];
+                memcpy(response, &resp_ether_dgram, eth_dgram_size);
+                memcpy(response + eth_dgram_size, &resp_arp_header, arp_fixed_part_size);
+                memcpy(response + eth_dgram_size + arp_fixed_part_size, &arp_hw_addr, arp_dynamic_part_size);
 
                 // Successful: write(fd, &resp_ether_dgram, sizeof(resp_ether_dgram))
                 write(fd, &resp_ether_dgram, sizeof(resp_ether_dgram));
-//                if (write(fd, &response, response_size) < 0) {
-//                    printf("Writing to descriptor failed\n");
-//                } else {
-//                    printf("Writing to descriptor successful\n");
-//                }
+                if (write(fd, response, response_size) < 0) {
+                    printf("Writing to descriptor failed\n");
+                } else {
+                    printf("Writing to descriptor successful\n");
+                }
 //                printf("Dst: %d\n", arp_packet.ether_dhost);
 //                printf("Src: %d\n", arp_packet.ether_shost);
 //                printf("Pointer: %p\n", (void*)&buffer[14]);
                 printf("---------------\n");
 
-                free(response);
+//                free(response);
             }
         }
 
