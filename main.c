@@ -126,7 +126,7 @@ int main() {
     // malloc or calloc is used only forming array in a runtime (when we don't know a size in compile time)
     char if_name[IFNAMSIZ] = "tap0";
     char address[9] = "10.0.0.1";
-    char ip[9] = "10.0.0.2";
+    char ip[9] = "10.0.0.2"; // @todo not used now
     char mac[7] = "abcdef";
     char subnet_mask[14] = "255.255.255.0";
     char buffer[1500];
@@ -189,9 +189,9 @@ int main() {
                 // Create ARP dynamic part
                 // Sender hardware address (ETH_ALEN) + Sender IP address (4) + Target hardware address (ETH_ALEN) + Target IP address (4) - NULL (1)
                 memcpy(arp_hw_addr, mac, sizeof(mac));
-                memcpy(arp_hw_addr + sizeof(mac) - 1, ip_bin, sizeof(ip_bin));
-                memcpy(arp_hw_addr + sizeof(mac) + sizeof(ip_bin) - 1, recv_arp_payload.__ar_sha, sizeof(recv_arp_payload.__ar_sha)); // Target MAC
-                memcpy(arp_hw_addr + sizeof(mac) + sizeof(ip_bin) + sizeof(recv_arp_payload.__ar_sha) - 1, recv_arp_payload.__ar_sip, sizeof(recv_arp_payload.__ar_sip)); // Target IP
+                memcpy(arp_hw_addr + sizeof(mac) - 1, recv_arp_payload.__ar_tip, sizeof(recv_arp_payload.__ar_tip)); // @todo maybe use recv_arp_payload.__ar_tip ?
+                memcpy(arp_hw_addr + sizeof(mac) + sizeof(recv_arp_payload.__ar_tip) - 1, recv_arp_payload.__ar_sha, sizeof(recv_arp_payload.__ar_sha)); // Target MAC
+                memcpy(arp_hw_addr + sizeof(mac) + sizeof(recv_arp_payload.__ar_tip) + sizeof(recv_arp_payload.__ar_sha) - 1, recv_arp_payload.__ar_sip, sizeof(recv_arp_payload.__ar_sip)); // Target IP
                 size_t arp_dynamic_part_size = sizeof(arp_hw_addr);
 
                 // Concat Ethernet headers with ARP
