@@ -24,6 +24,17 @@ struct arppld
     unsigned char __ar_tip[4];		/* Target IP address.  */
 };
 
+// Protect from adding padding
+__attribute__((__packed__)) struct arp_resp
+{
+    // ETH header
+    struct ether_header eh;
+    // ARP header
+    struct arphdr ah;
+    // ARP payload
+    struct arppld ap;
+};
+
 // It is not possible in C to pass an array by value.
 int tun_alloc(char *dev) {
     struct ifreq ifr;
@@ -131,11 +142,10 @@ int main() {
     char subnet_mask[14] = "255.255.255.0";
     char buffer[1500];
     int fd, sd, mtu, nread;
-    size_t response_size;
-    struct ether_header recv_ether_dgram, resp_ether_dgram;
-    struct arphdr recv_arp_header, resp_arp_header;
+    struct ether_header recv_ether_dgram;
+    struct arphdr recv_arp_header;
     struct arppld recv_arp_payload;
-    unsigned char arp_hw_addr[ETH_ALEN + ETH_ALEN + 8];
+    struct arp_resp arp_response;
     unsigned char ip_bin[sizeof(struct in_addr)];
     inet_pton(AF_INET, ip, ip_bin);
 
@@ -164,20 +174,16 @@ int main() {
                 printf("Protocol type: %d\n", htons(recv_arp_header.ar_pro));
 
                 // Create Ethernet part
-//                strcpy((char*)resp_ether_dgram.ether_dhost, (char*)recv_ether_dgram.ether_shost);
-//                strcpy((char*)resp_ether_dgram.ether_shost, mac);
-                memcpy(resp_ether_dgram.ether_dhost, recv_ether_dgram.ether_shost, ETH_ALEN);
-                memcpy(resp_ether_dgram.ether_shost, mac, ETH_ALEN);
-                resp_ether_dgram.ether_type = htons(ETHERTYPE_ARP);
-                size_t eth_dgram_size = sizeof(resp_ether_dgram);
+                memcpy(arp_response.eh.ether_dhost, recv_ether_dgram.ether_shost, sizeof(recv_ether_dgram.ether_shost));
+                memcpy(arp_response.eh.ether_shost, mac, ETH_ALEN);
+                arp_response.eh.ether_type = htons(ETHERTYPE_ARP);
 
                 // Create ARP fixed part
-                resp_arp_header.ar_hrd = htons(ARPHRD_ETHER);
-                resp_arp_header.ar_pro = htons(0x0800);
-                resp_arp_header.ar_hln = ETH_ALEN;
-                resp_arp_header.ar_pln = 4;
-                resp_arp_header.ar_op = htons(ARPOP_REPLY);
-                size_t arp_fixed_part_size = sizeof(resp_arp_header);
+                arp_response.ah.ar_hrd = htons(ARPHRD_ETHER);
+                arp_response.ah.ar_pro = htons(0x0800);
+                arp_response.ah.ar_hln = ETH_ALEN;
+                arp_response.ah.ar_pln = 4;
+                arp_response.ah.ar_op = htons(ARPOP_REPLY);
 
                 // Create ARP dynamic part (wrong attempt)
                 // This does not work because if strcpy or strcat finds "0" in a string (for example in IP), it stops because "0" is string end symbol. Must use memcpy to avoid.
@@ -187,22 +193,20 @@ int main() {
 //                strncat((char*)arp_hw_addr, recv_arp_payload.__ar_sip, sizeof(recv_arp_payload.__ar_sip)); // Target IP
 
                 // Create ARP dynamic part
-                // Sender hardware address (ETH_ALEN) + Sender IP address (4) + Target hardware address (ETH_ALEN) + Target IP address (4) - NULL (1)
-                memcpy(arp_hw_addr, mac, sizeof(mac));
-                memcpy(arp_hw_addr + sizeof(mac) - 1, recv_arp_payload.__ar_tip, sizeof(recv_arp_payload.__ar_tip)); // @todo maybe use recv_arp_payload.__ar_tip ?
-                memcpy(arp_hw_addr + sizeof(mac) + sizeof(recv_arp_payload.__ar_tip) - 1, recv_arp_payload.__ar_sha, sizeof(recv_arp_payload.__ar_sha)); // Target MAC
-                memcpy(arp_hw_addr + sizeof(mac) + sizeof(recv_arp_payload.__ar_tip) + sizeof(recv_arp_payload.__ar_sha) - 1, recv_arp_payload.__ar_sip, sizeof(recv_arp_payload.__ar_sip)); // Target IP
-                size_t arp_dynamic_part_size = sizeof(arp_hw_addr);
+                memcpy(arp_response.ap.__ar_sha, mac, sizeof(mac));
+                memcpy(arp_response.ap.__ar_sip, recv_arp_payload.__ar_tip, sizeof(recv_arp_payload.__ar_tip));
+                memcpy(arp_response.ap.__ar_tha, recv_arp_payload.__ar_sha, sizeof(recv_arp_payload.__ar_sha));
+                memcpy(arp_response.ap.__ar_tip, recv_arp_payload.__ar_sip, sizeof(recv_arp_payload.__ar_sip));
 
-                // Concat Ethernet headers with ARP
-                response_size = eth_dgram_size + arp_fixed_part_size + arp_dynamic_part_size;
-                char response[response_size];
-                memcpy(response, &resp_ether_dgram, eth_dgram_size);
-                memcpy(response + eth_dgram_size, &resp_arp_header, arp_fixed_part_size);
-                memcpy(response + eth_dgram_size + arp_fixed_part_size, &arp_hw_addr, arp_dynamic_part_size);
+                // The other way (to move pointer)
+                // Sender hardware address (ETH_ALEN) + Sender IP address (4) + Target hardware address (ETH_ALEN) + Target IP address (4) - NULL (1)
+//                memcpy(arp_hw_addr, mac, sizeof(mac));
+//                memcpy(arp_hw_addr + sizeof(mac) - 1, recv_arp_payload.__ar_tip, sizeof(recv_arp_payload.__ar_tip)); // @todo maybe use recv_arp_payload.__ar_tip ?
+//                memcpy(arp_hw_addr + sizeof(mac) + sizeof(recv_arp_payload.__ar_tip) - 1, recv_arp_payload.__ar_sha, sizeof(recv_arp_payload.__ar_sha)); // Target MAC
+//                memcpy(arp_hw_addr + sizeof(mac) + sizeof(recv_arp_payload.__ar_tip) + sizeof(recv_arp_payload.__ar_sha) - 1, recv_arp_payload.__ar_sip, sizeof(recv_arp_payload.__ar_sip)); // Target IP
 
                 // Successful: write(fd, &resp_ether_dgram, sizeof(resp_ether_dgram))
-                if (write(fd, response, response_size) < 0) {
+                if (write(fd, &arp_response, sizeof(arp_response)) < 0) {
                     printf("Writing to descriptor failed\n");
                 } else {
                     printf("Writing to descriptor successful\n");
