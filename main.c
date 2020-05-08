@@ -1,3 +1,7 @@
+//
+// Created by bartimaeus (sarunas.bartusevicius@gmail.com) on 20.4.21.
+//
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,25 +19,7 @@
 #include <arpa/inet.h>
 #include <net/ethernet.h>
 #include <net/if_arp.h>
-
-struct arppld
-{
-    unsigned char __ar_sha[ETH_ALEN];	/* Sender hardware address.  */
-    unsigned char __ar_sip[4];		/* Sender IP address.  */
-    unsigned char __ar_tha[ETH_ALEN];	/* Target hardware address.  */
-    unsigned char __ar_tip[4];		/* Target IP address.  */
-};
-
-// Protect from adding padding
-__attribute__((__packed__)) struct arp_resp
-{
-    // ETH header
-    struct ether_header eh;
-    // ARP header
-    struct arphdr ah;
-    // ARP payload
-    struct arppld ap;
-};
+#include "arp.h"
 
 // It is not possible in C to pass an array by value.
 int tun_alloc(char *dev) {
@@ -48,11 +34,9 @@ int tun_alloc(char *dev) {
     // Fill all ifr with 0
     memset(&ifr, 0, sizeof(ifr));
 
-    /* Flags: IFF_TUN   - TUN device (no Ethernet headers)
-     *        IFF_TAP   - TAP device
-     *
-     *        IFF_NO_PI - Do not provide packet information
-     */
+    // IFF_TUN - TUN device (no Ethernet headers)
+    // IFF_TAP - TAP device
+    // IFF_NO_PI - Do not provide packet information
     ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
     // * is dereference operator. Ir returns value behind a pointer
     if (*dev) {
@@ -137,17 +121,12 @@ int main() {
     // malloc or calloc is used only forming array in a runtime (when we don't know a size in compile time)
     char if_name[IFNAMSIZ] = "tap0";
     char address[9] = "10.0.0.1";
-    char ip[9] = "10.0.0.2"; // @todo not used now
     char mac[7] = "abcdef";
     char subnet_mask[14] = "255.255.255.0";
     char buffer[1500];
     int fd, sd, mtu, nread;
     struct ether_header recv_ether_dgram;
-    struct arphdr recv_arp_header;
-    struct arppld recv_arp_payload;
     struct arp_resp arp_response;
-    unsigned char ip_bin[sizeof(struct in_addr)];
-    inet_pton(AF_INET, ip, ip_bin);
 
     fd = tun_alloc(if_name);
     sd = tun_config(if_name, address, subnet_mask);
@@ -165,57 +144,15 @@ int main() {
 
         // htons(arp_packet.ether_type) - convert to network byte order
         if (htons(recv_ether_dgram.ether_type) == ETHERTYPE_ARP) {
-            recv_arp_header = *(struct arphdr*)&buffer[sizeof(recv_ether_dgram)]; // & needed because buffer = &buffer[0] and *buffer = buffer[0].
-            if (htons(recv_arp_header.ar_op) == ARPOP_REQUEST) {
-                recv_arp_payload = *(struct arppld*)&buffer[sizeof(recv_ether_dgram) + sizeof(recv_arp_header)];
+            arp_response = handle_arp(mac, buffer, recv_ether_dgram);
 
-                printf("---------------\n");
-                printf("ARP request\n");
-                printf("Protocol type: %d\n", htons(recv_arp_header.ar_pro));
-
-                // Create Ethernet part
-                memcpy(arp_response.eh.ether_dhost, recv_ether_dgram.ether_shost, sizeof(recv_ether_dgram.ether_shost));
-                memcpy(arp_response.eh.ether_shost, mac, ETH_ALEN);
-                arp_response.eh.ether_type = htons(ETHERTYPE_ARP);
-
-                // Create ARP fixed part
-                arp_response.ah.ar_hrd = htons(ARPHRD_ETHER);
-                arp_response.ah.ar_pro = htons(0x0800);
-                arp_response.ah.ar_hln = ETH_ALEN;
-                arp_response.ah.ar_pln = 4;
-                arp_response.ah.ar_op = htons(ARPOP_REPLY);
-
-                // Create ARP dynamic part (wrong attempt)
-                // This does not work because if strcpy or strcat finds "0" in a string (for example in IP), it stops because "0" is string end symbol. Must use memcpy to avoid.
-//                strncpy((char*)arp_hw_addr, mac, sizeof(mac) - 1); // Sender MAC
-//                strncat((char*)arp_hw_addr, ip_bin, 4); // Sender IP
-//                strncat((char*)arp_hw_addr, recv_arp_payload.__ar_sha, sizeof(recv_arp_payload.__ar_sha)); // Target MAC
-//                strncat((char*)arp_hw_addr, recv_arp_payload.__ar_sip, sizeof(recv_arp_payload.__ar_sip)); // Target IP
-
-                // Create ARP dynamic part
-                memcpy(arp_response.ap.__ar_sha, mac, sizeof(mac));
-                memcpy(arp_response.ap.__ar_sip, recv_arp_payload.__ar_tip, sizeof(recv_arp_payload.__ar_tip));
-                memcpy(arp_response.ap.__ar_tha, recv_arp_payload.__ar_sha, sizeof(recv_arp_payload.__ar_sha));
-                memcpy(arp_response.ap.__ar_tip, recv_arp_payload.__ar_sip, sizeof(recv_arp_payload.__ar_sip));
-
-                // The other way (to move pointer)
-                // Sender hardware address (ETH_ALEN) + Sender IP address (4) + Target hardware address (ETH_ALEN) + Target IP address (4) - NULL (1)
-//                memcpy(arp_hw_addr, mac, sizeof(mac));
-//                memcpy(arp_hw_addr + sizeof(mac) - 1, recv_arp_payload.__ar_tip, sizeof(recv_arp_payload.__ar_tip)); // @todo maybe use recv_arp_payload.__ar_tip ?
-//                memcpy(arp_hw_addr + sizeof(mac) + sizeof(recv_arp_payload.__ar_tip) - 1, recv_arp_payload.__ar_sha, sizeof(recv_arp_payload.__ar_sha)); // Target MAC
-//                memcpy(arp_hw_addr + sizeof(mac) + sizeof(recv_arp_payload.__ar_tip) + sizeof(recv_arp_payload.__ar_sha) - 1, recv_arp_payload.__ar_sip, sizeof(recv_arp_payload.__ar_sip)); // Target IP
-
-                // Successful: write(fd, &resp_ether_dgram, sizeof(resp_ether_dgram))
-                if (write(fd, &arp_response, sizeof(arp_response)) < 0) {
-                    printf("Writing to descriptor failed\n");
-                } else {
-                    printf("Writing to descriptor successful\n");
-                }
-
-                printf("---------------\n");
-
-//                free(response);
+            if (write(fd, &arp_response, sizeof(arp_response)) < 0) {
+                printf("Writing to descriptor failed\n");
+            } else {
+                printf("Writing to descriptor successful\n");
             }
+
+            printf("---------------\n");
         }
 
         if (nread == 5000) { // Impossible. Just to relax IDE...

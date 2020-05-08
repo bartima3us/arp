@@ -3,4 +3,4 @@ project(arp C)
 
 set(CMAKE_C_STANDARD 99)
 
-add_executable(arp main.c)
+add_executable(arp main.c arp.c arp.h)
