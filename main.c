@@ -20,6 +20,7 @@
 #include <net/ethernet.h>
 #include <net/if_arp.h>
 #include "arp.h"
+#include "ipv4.h"
 
 // It is not possible in C to pass an array by value.
 int tun_alloc(char *dev) {
@@ -121,12 +122,14 @@ int main() {
     // malloc or calloc is used only forming array in a runtime (when we don't know a size in compile time)
     char if_name[IFNAMSIZ] = "tap0";
     char address[9] = "10.0.0.1";
-    char mac[7] = "abcdef";
+    char mac[7] = "opzxer";
     char subnet_mask[14] = "255.255.255.0";
     char buffer[1500];
     int fd, sd, mtu, nread;
+    ssize_t send_res = -1;
     struct ether_header recv_ether_dgram;
     struct arp_resp arp_response;
+    struct ipv4_resp ipv4_response;
 
     fd = tun_alloc(if_name);
     sd = tun_config(if_name, address, subnet_mask);
@@ -142,18 +145,25 @@ int main() {
         recv_ether_dgram = *(struct ether_header*)buffer;
         printf("Read bytes: %d\n", nread);
 
-        // htons(arp_packet.ether_type) - convert to network byte order
-        if (htons(recv_ether_dgram.ether_type) == ETHERTYPE_ARP) {
-            arp_response = handle_arp(mac, buffer, recv_ether_dgram);
-
-            if (write(fd, &arp_response, sizeof(arp_response)) < 0) {
-                printf("Writing to descriptor failed\n");
-            } else {
-                printf("Writing to descriptor successful\n");
-            }
-
-            printf("---------------\n");
+        // ARP
+        if (htons(recv_ether_dgram.ether_type) == ETHERTYPE_ARP) { // htons() - convert to network byte order
+            arp_response = handle_arp(if_mac, buffer, recv_ether_dgram);
+            send_res = write(fd, &arp_response, sizeof(arp_response));
+        // IPv4
+        } else if (htons(recv_ether_dgram.ether_type) == ETHERTYPE_IP) {
+            ipv4_response = handle_ipv4(if_mac, buffer, recv_ether_dgram);
+            char resp[ipv4_response.length];
+            memcpy(resp, &ipv4_response, ipv4_response.length);
+            send_res = write(fd, &resp, sizeof(resp));
         }
+
+        if (send_res < 0) {
+            printf("Writing to descriptor failed\n");
+        } else {
+            printf("Writing to descriptor successful\n");
+        }
+
+        printf("---------------\n");
 
         if (nread == 5000) { // Impossible. Just to relax IDE...
             break;

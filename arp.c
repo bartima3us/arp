@@ -58,6 +58,4 @@ struct arp_resp handle_arp(char* mac, char* buffer, struct ether_header recv_eth
 
         return arp_response;
     }
-
-    return NULL;
 }
