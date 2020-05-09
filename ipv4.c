@@ -17,7 +17,8 @@
 # define ODDBYTE(v)	htons((unsigned short)(v) << 8)
 #endif
 
-// Taken from ping.c
+// https://stackoverflow.com/questions/20247551/icmp-echo-checksum
+// Taken from https://github.com/iputils/iputils/blob/9f7f1d4c4fd4fd90d2c5e66d6deb7f87f2eb1cea/ping.c
 unsigned short in_cksum(const unsigned short *addr, register int len, unsigned short csum)
 {
     register int nleft = len;
@@ -52,7 +53,7 @@ unsigned short in_cksum(const unsigned short *addr, register int len, unsigned s
 struct ipv4_resp handle_ipv4(char* mac, char* buffer, struct ether_header recv_ether_dgram)
 {
     struct iphdr recv_ipv4_header;
-    struct icmphdr recv_icmp_header;
+    struct icmphdr2 recv_icmp_header;
     struct ipv4_resp ipv4_response;
     struct icmphdr2 icmp_response;
     char icmp_payload[48] = "qertyuiopasdfghjklzxcvbnm0123456789zxcvbnmasdfh";
@@ -61,7 +62,7 @@ struct ipv4_resp handle_ipv4(char* mac, char* buffer, struct ether_header recv_e
 
     // ICMP
     if (recv_ipv4_header.protocol == 0x01) {
-        recv_icmp_header = *(struct icmphdr*)&buffer[sizeof(recv_ether_dgram) + sizeof(recv_ipv4_header)];
+        recv_icmp_header = *(struct icmphdr2*)&buffer[sizeof(recv_ether_dgram) + sizeof(recv_ipv4_header)];
 
         if (recv_icmp_header.type == ICMP_ECHO) {
             printf("---------------\n");
@@ -86,9 +87,10 @@ struct ipv4_resp handle_ipv4(char* mac, char* buffer, struct ether_header recv_e
             icmp_response.type = ICMP_ECHOREPLY;
             icmp_response.code = 0;
             icmp_response.checksum = 0x0000;
-            icmp_response.id = recv_icmp_header.un.echo.id;
-            icmp_response.sequence = recv_icmp_header.un.echo.sequence;
-            memcpy(icmp_response.payload, icmp_payload, sizeof(icmp_payload));
+            icmp_response.id = recv_icmp_header.id;
+            icmp_response.sequence = recv_icmp_header.sequence;
+            icmp_response.ts = recv_icmp_header.ts;
+            memcpy(icmp_response.payload, recv_icmp_header.payload, sizeof(icmp_response.payload));
             icmp_response.checksum = in_cksum((unsigned short *)&icmp_response, sizeof(icmp_response), 0);
 
             // Set IPv4 packet size

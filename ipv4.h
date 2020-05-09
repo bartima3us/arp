@@ -28,6 +28,7 @@ struct icmphdr2 {
     __sum16	checksum;
     __be16	id;
     __be16	sequence;
+    __be64  ts; // Timestamp
     char    payload[48];
 };
 
