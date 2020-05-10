@@ -122,7 +122,13 @@ int main() {
     // malloc or calloc is used only forming array in a runtime (when we don't know a size in compile time)
     char if_name[IFNAMSIZ] = "tap0";
     char address[9] = "10.0.0.1";
-    char mac[7] = "opzxer";
+    /*
+     * https://en.wikipedia.org/wiki/MAC_address#Universal_vs._local
+     * Universally administered and locally administered addresses are distinguished by setting the second-least-significant bit of the first octet of the address.
+     * If the bit is 0, the address is universally administered.
+     * If it is 1, the address is locally administered.
+    */
+    char mac[ETH_ALEN + 1] = "\x02\x00\x00\x00\x00\x01";
     char subnet_mask[14] = "255.255.255.0";
     char buffer[1500];
     int fd, sd, mtu, nread;
@@ -147,11 +153,11 @@ int main() {
 
         // ARP
         if (htons(recv_ether_dgram.ether_type) == ETHERTYPE_ARP) { // htons() - convert to network byte order
-            arp_response = handle_arp(if_mac, buffer, recv_ether_dgram);
+            arp_response = handle_arp(mac, buffer, recv_ether_dgram);
             send_res = write(fd, &arp_response, sizeof(arp_response));
         // IPv4
         } else if (htons(recv_ether_dgram.ether_type) == ETHERTYPE_IP) {
-            ipv4_response = handle_ipv4(if_mac, buffer, recv_ether_dgram);
+            ipv4_response = handle_ipv4(mac, buffer, recv_ether_dgram);
             char resp[ipv4_response.length];
             memcpy(resp, &ipv4_response, ipv4_response.length);
             send_res = write(fd, &resp, sizeof(resp));
