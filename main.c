@@ -21,6 +21,7 @@
 #include <net/if_arp.h>
 #include "arp.h"
 #include "ipv4.h"
+#include "icmp.h"
 
 // It is not possible in C to pass an array by value.
 int tun_alloc(char *dev) {
@@ -136,6 +137,7 @@ int main() {
     struct ether_header recv_ether_dgram;
     struct arp_resp arp_response;
     struct ipv4_resp ipv4_response;
+    struct iphdr recv_ipv4_header;
 
     fd = tun_alloc(if_name);
     sd = tun_config(if_name, address, subnet_mask);
@@ -151,16 +153,25 @@ int main() {
         recv_ether_dgram = *(struct ether_header*)buffer;
         printf("Read bytes: %d\n", nread);
 
+        if (nread == 188) {
+            continue;
+        }
+
         // ARP
         if (htons(recv_ether_dgram.ether_type) == ETHERTYPE_ARP) { // htons() - convert to network byte order
             arp_response = handle_arp(mac, buffer, recv_ether_dgram);
             send_res = write(fd, &arp_response, sizeof(arp_response));
         // IPv4
         } else if (htons(recv_ether_dgram.ether_type) == ETHERTYPE_IP) {
-            ipv4_response = handle_ipv4(mac, buffer, recv_ether_dgram);
-            char resp[ipv4_response.length];
-            memcpy(resp, &ipv4_response, ipv4_response.length);
-            send_res = write(fd, &resp, sizeof(resp));
+            recv_ipv4_header = *(struct iphdr*)&buffer[sizeof(recv_ether_dgram)];
+
+            // ICMP
+            if (recv_ipv4_header.protocol == 0x01) {
+                ipv4_response = handle_icmp(mac, buffer, recv_ether_dgram, recv_ipv4_header);
+                char resp[ipv4_response.length];
+                memcpy(resp, &ipv4_response, ipv4_response.length);
+                send_res = write(fd, &resp, sizeof(resp));
+            }
         }
 
         if (send_res < 0) {

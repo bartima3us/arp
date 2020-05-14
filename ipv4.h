@@ -6,7 +6,7 @@
 #define ARP_IPV4_H
 
 #include <net/ethernet.h>
-#include <linux/ip.h>
+#include <netinet/ip.h>
 
 struct iphdr2 {
     __u8	version;

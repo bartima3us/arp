@@ -3,11 +3,13 @@
 //
 
 #include <stdio.h>
-#include <linux/ip.h>
-#include <linux/icmp.h>
+//#include <linux/ip.h>
+//#include <linux/icmp.h> @todo why this one is needed? It differs from <netinet/ip_icmp.h>
 #include <string.h>
 #include <netinet/in.h>
 #include "ipv4.h"
+#include <netinet/ip_icmp.h>
+#include <netinet/ip.h>
 
 #if BYTE_ORDER == LITTLE_ENDIAN
 # define ODDBYTE(v)	(v)
@@ -19,36 +21,36 @@
 
 // https://stackoverflow.com/questions/20247551/icmp-echo-checksum
 // Taken from https://github.com/iputils/iputils/blob/9f7f1d4c4fd4fd90d2c5e66d6deb7f87f2eb1cea/ping.c
-unsigned short in_cksum(const unsigned short *addr, register int len, unsigned short csum)
-{
-    register int nleft = len;
-    const unsigned short *w = addr;
-    register unsigned short answer;
-    register int sum = csum;
-
-    /*
-     *  Our algorithm is simple, using a 32 bit accumulator (sum),
-     *  we add sequential 16 bit words to it, and at the end, fold
-     *  back all the carry bits from the top 16 bits into the lower
-     *  16 bits.
-     */
-    while (nleft > 1)  {
-        sum += *w++;
-        nleft -= 2;
-    }
-
-    /* mop up an odd byte, if necessary */
-    if (nleft == 1)
-        sum += ODDBYTE(*(unsigned char *)w); /* le16toh() may be unavailable on old systems */
-
-    /*
-     * add back carry outs from top 16 bits to low 16 bits
-     */
-    sum = (sum >> 16) + (sum & 0xffff);	/* add hi 16 to low 16 */
-    sum += (sum >> 16);			/* add carry */
-    answer = ~sum;				/* truncate to 16 bits */
-    return (answer);
-}
+//unsigned short in_cksum(const unsigned short *addr, register int len, unsigned short csum)
+//{
+//    register int nleft = len;
+//    const unsigned short *w = addr;
+//    register unsigned short answer;
+//    register int sum = csum;
+//
+//    /*
+//     *  Our algorithm is simple, using a 32 bit accumulator (sum),
+//     *  we add sequential 16 bit words to it, and at the end, fold
+//     *  back all the carry bits from the top 16 bits into the lower
+//     *  16 bits.
+//     */
+//    while (nleft > 1)  {
+//        sum += *w++;
+//        nleft -= 2;
+//    }
+//
+//    /* mop up an odd byte, if necessary */
+//    if (nleft == 1)
+//        sum += ODDBYTE(*(unsigned char *)w); /* le16toh() may be unavailable on old systems */
+//
+//    /*
+//     * add back carry outs from top 16 bits to low 16 bits
+//     */
+//    sum = (sum >> 16) + (sum & 0xffff);	/* add hi 16 to low 16 */
+//    sum += (sum >> 16);			/* add carry */
+//    answer = ~sum;				/* truncate to 16 bits */
+//    return (answer);
+//}
 
 struct ipv4_resp handle_ipv4(char* mac, char* buffer, struct ether_header recv_ether_dgram)
 {
@@ -91,7 +93,7 @@ struct ipv4_resp handle_ipv4(char* mac, char* buffer, struct ether_header recv_e
             icmp_response.sequence = recv_icmp_header.sequence;
             icmp_response.ts = recv_icmp_header.ts;
             memcpy(icmp_response.payload, recv_icmp_header.payload, sizeof(icmp_response.payload));
-            icmp_response.checksum = in_cksum((unsigned short *)&icmp_response, sizeof(icmp_response), 0);
+//            icmp_response.checksum = in_cksum((unsigned short *)&icmp_response, sizeof(icmp_response), 0);
 
             // Set IPv4 packet size
             ipv4_response.ih.tot_len = htons(sizeof(ipv4_response.ih) + sizeof(icmp_response));
