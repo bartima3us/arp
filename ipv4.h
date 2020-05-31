@@ -22,16 +22,6 @@ struct iphdr2 {
     /*The options start here. */
 };
 
-struct icmphdr2 {
-    __u8	type;
-    __u8	code;
-    __sum16	checksum;
-    __be16	id;
-    __be16	sequence;
-    __be64  ts; // Timestamp
-    char    payload[48];
-};
-
 struct ipv4_resp
 {
     // ETH header
@@ -43,7 +33,5 @@ struct ipv4_resp
     // Real packet length
     size_t length;
 } __attribute__ ((__packed__));
-
-struct ipv4_resp handle_ipv4(char* mac, char* buffer, struct ether_header recv_ether_dgram);
 
 #endif //ARP_IPV4_H
