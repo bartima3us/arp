@@ -171,6 +171,9 @@ int main() {
                 char resp[ipv4_response.length];
                 memcpy(resp, &ipv4_response, ipv4_response.length);
                 send_res = write(fd, &resp, sizeof(resp));
+            // UDP
+            } else if (recv_ipv4_header.protocol == 0x11) { // 0x11 = 17
+                printf("UDP!\n");
             }
         }
 
