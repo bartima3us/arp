@@ -22,6 +22,7 @@
 #include "arp.h"
 #include "ipv4.h"
 #include "icmp.h"
+#include "udp.h"
 
 // It is not possible in C to pass an array by value.
 int tun_alloc(char *dev) {
@@ -173,7 +174,7 @@ int main() {
                 send_res = write(fd, &resp, sizeof(resp));
             // UDP
             } else if (recv_ipv4_header.protocol == 0x11) { // 0x11 = 17
-                printf("UDP!\n");
+                handle_udp(buffer, recv_ether_dgram, recv_ipv4_header);
             }
         }
 
