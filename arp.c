@@ -9,23 +9,23 @@
 #include <net/ethernet.h>
 #include <netinet/in.h>
 
-struct arp_resp handle_arp(char* mac, char* buffer, struct ether_header recv_ether_dgram)
+struct arp_resp handle_arp(char* mac, char* buffer, struct ether_header recv_ether_dgram_hdr)
 {
     struct arphdr recv_arp_header;
     struct arppld recv_arp_payload;
     struct arp_resp arp_response;
 
-    recv_arp_header = *(struct arphdr*)&buffer[sizeof(recv_ether_dgram)];
+    recv_arp_header = *(struct arphdr*)&buffer[sizeof(recv_ether_dgram_hdr)];
 
     if (htons(recv_arp_header.ar_op) == ARPOP_REQUEST) {
-        recv_arp_payload = *(struct arppld*)&buffer[sizeof(recv_ether_dgram) + sizeof(recv_arp_header)];
+        recv_arp_payload = *(struct arppld*)&buffer[sizeof(recv_ether_dgram_hdr) + sizeof(recv_arp_header)];
 
         printf("---------------\n");
         printf("ARP request\n");
         printf("Protocol type: %d\n", htons(recv_arp_header.ar_pro));
 
         // Create Ethernet part
-        memcpy(arp_response.eh.ether_dhost, recv_ether_dgram.ether_shost, sizeof(recv_ether_dgram.ether_shost));
+        memcpy(arp_response.eh.ether_dhost, recv_ether_dgram_hdr.ether_shost, sizeof(recv_ether_dgram_hdr.ether_shost));
         memcpy(arp_response.eh.ether_shost, mac, ETH_ALEN);
         arp_response.eh.ether_type = htons(ETHERTYPE_ARP);
 

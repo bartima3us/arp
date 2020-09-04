@@ -135,7 +135,7 @@ int main() {
     char buffer[1500];
     int fd, sd, mtu, nread;
     ssize_t send_res = -1;
-    struct ether_header recv_ether_dgram;
+    struct ether_header recv_ether_dgram_hdr;
     struct arp_resp arp_response;
     struct ipv4_resp ipv4_response;
     struct iphdr recv_ipv4_header;
@@ -151,7 +151,7 @@ int main() {
 
     while (1) {
         nread = read(fd, buffer, mtu); // MTU = 1500
-        recv_ether_dgram = *(struct ether_header*)buffer;
+        recv_ether_dgram_hdr = *(struct ether_header*)buffer;
         printf("Read bytes: %d\n", nread);
 
         if (nread == 188) {
@@ -159,22 +159,22 @@ int main() {
         }
 
         // ARP
-        if (htons(recv_ether_dgram.ether_type) == ETHERTYPE_ARP) { // htons() - convert to network byte order
-            arp_response = handle_arp(mac, buffer, recv_ether_dgram);
+        if (htons(recv_ether_dgram_hdr.ether_type) == ETHERTYPE_ARP) { // htons() - convert to network byte order
+            arp_response = handle_arp(mac, buffer, recv_ether_dgram_hdr);
             send_res = write(fd, &arp_response, sizeof(arp_response));
         // IPv4
-        } else if (htons(recv_ether_dgram.ether_type) == ETHERTYPE_IP) {
-            recv_ipv4_header = *(struct iphdr*)&buffer[sizeof(recv_ether_dgram)];
+        } else if (htons(recv_ether_dgram_hdr.ether_type) == ETHERTYPE_IP) {
+            recv_ipv4_header = *(struct iphdr*)&buffer[sizeof(recv_ether_dgram_hdr)];
 
             // ICMP
             if (recv_ipv4_header.protocol == 0x01) {
-                ipv4_response = handle_icmp(mac, buffer, recv_ether_dgram, recv_ipv4_header);
+                ipv4_response = handle_icmp(mac, buffer, recv_ether_dgram_hdr, recv_ipv4_header);
                 char resp[ipv4_response.length];
                 memcpy(resp, &ipv4_response, ipv4_response.length);
                 send_res = write(fd, &resp, sizeof(resp));
             // UDP
             } else if (recv_ipv4_header.protocol == 0x11) { // 0x11 = 17
-                handle_udp(buffer, recv_ether_dgram, recv_ipv4_header);
+                handle_udp(buffer, recv_ether_dgram_hdr, recv_ipv4_header);
             }
         }
 
