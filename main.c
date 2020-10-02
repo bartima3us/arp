@@ -134,6 +134,7 @@ int main() {
     char subnet_mask[14] = "255.255.255.0";
     char buffer[1500];
     int fd, sd, mtu, nread;
+    int dont_fragment, more_fragments; // Flags
     ssize_t send_res = -1;
     struct ether_header recv_ether_dgram_hdr;
     struct arp_resp arp_response;
@@ -164,7 +165,13 @@ int main() {
             send_res = write(fd, &arp_response, sizeof(arp_response));
         // IPv4
         } else if (htons(recv_ether_dgram_hdr.ether_type) == ETHERTYPE_IP) {
+            // @todo defragmentation
             recv_ipv4_header = *(struct iphdr*)&buffer[sizeof(recv_ether_dgram_hdr)];
+
+            dont_fragment = (recv_ipv4_header.frag_off >> 13) & 1;
+            more_fragments = (recv_ipv4_header.frag_off >> 14) & 1;
+            printf("dont_fragment: %d\n", dont_fragment);
+            printf("more_fragments: %d\n", more_fragments);
 
             // ICMP
             if (recv_ipv4_header.protocol == 0x01) {
