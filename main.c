@@ -168,8 +168,8 @@ int main() {
             // @todo defragmentation
             recv_ipv4_header = *(struct iphdr*)&buffer[sizeof(recv_ether_dgram_hdr)];
 
-            dont_fragment = (recv_ipv4_header.frag_off >> 13) & 1;
-            more_fragments = (recv_ipv4_header.frag_off >> 14) & 1;
+            more_fragments = (htons(recv_ipv4_header.frag_off) >> 13) & 1;
+            dont_fragment = (htons(recv_ipv4_header.frag_off) >> 14) & 1;
             printf("dont_fragment: %d\n", dont_fragment);
             printf("more_fragments: %d\n", more_fragments);
 
