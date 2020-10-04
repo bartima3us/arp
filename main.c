@@ -120,6 +120,21 @@ char* get_mac(int sd) {
     return mac;
 }
 
+__u8 find_fragment(struct fragment* fragments_ptr, struct fragment curr_fragment, int fragments_counter)
+{
+    for (int i = 0; i < fragments_counter; i++) {
+        if (fragments_ptr[i].protocol == curr_fragment.protocol
+            && fragments_ptr[i].saddr == curr_fragment.saddr
+            && fragments_ptr[i].daddr == curr_fragment.daddr
+            && fragments_ptr[i].id == curr_fragment.id
+        ) {
+            return fragments_ptr[i].bitmap_ptr;
+        }
+    }
+
+    return 0;
+}
+
 int main() {
     // malloc or calloc is used only forming array in a runtime (when we don't know a size in compile time)
     char if_name[IFNAMSIZ] = "tap0";
@@ -135,11 +150,15 @@ int main() {
     char buffer[1500];
     int fd, sd, mtu, nread;
     int frag_off, dont_fragment, more_fragments, offset; // Flags
+    __be16 id;
     ssize_t send_res = -1;
     struct ether_header recv_ether_dgram_hdr;
     struct arp_resp arp_response;
     struct ipv4_resp ipv4_response;
     struct iphdr recv_ipv4_header;
+    struct fragment *fragments_ptr = NULL;
+    struct fragment curr_fragment;
+    int fragments_counter = 0;
 
     fd = tun_alloc(if_name);
     sd = tun_config(if_name, address, subnet_mask);
@@ -165,13 +184,34 @@ int main() {
             send_res = write(fd, &arp_response, sizeof(arp_response));
         // IPv4
         } else if (htons(recv_ether_dgram_hdr.ether_type) == ETHERTYPE_IP) {
-            // @todo reassembling
             recv_ipv4_header = *(struct iphdr*)&buffer[sizeof(recv_ether_dgram_hdr)];
 
             frag_off = htons(recv_ipv4_header.frag_off);
             more_fragments = (frag_off >> 13) & 1;
             dont_fragment = (frag_off >> 14) & 1;
-            offset = frag_off & 0b0001111111111111;
+            offset = frag_off & 0b0001111111111111; // @todo make prettier
+            id = htons(recv_ipv4_header.id);
+
+            // @todo if time ends, send ICMP time exceeded
+            // Reassembling
+            if (offset != 0 || more_fragments != 0) {
+                __u8 searching_fragment;
+                curr_fragment.saddr = recv_ipv4_header.saddr;
+                curr_fragment.daddr = recv_ipv4_header.daddr;
+                curr_fragment.id = id;
+                curr_fragment.protocol = recv_ipv4_header.protocol;
+                curr_fragment.bitmap_ptr = 123;
+
+                if (!fragments_ptr) {
+                    printf("Initiated fragment pointer!\n");
+                    fragments_counter++;
+                    fragments_ptr = malloc(sizeof(struct fragment));
+                    memcpy(fragments_ptr, &curr_fragment, sizeof(curr_fragment));
+                } else if ((searching_fragment = find_fragment(fragments_ptr, curr_fragment, fragments_counter))) {
+                    printf("FRAGMENT FOUND: %d\n", searching_fragment);
+                }
+            }
+
             printf("dont_fragment: %d\n", dont_fragment);
             printf("more_fragments: %d\n", more_fragments);
             printf("offset: %d\n", offset);
