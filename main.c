@@ -120,19 +120,32 @@ char* get_mac(int sd) {
     return mac;
 }
 
-__u8 find_fragment(struct fragment* fragments_ptr, struct fragment curr_fragment, int fragments_counter)
-{
-    for (int i = 0; i < fragments_counter; i++) {
-        if (fragments_ptr[i].protocol == curr_fragment.protocol
-            && fragments_ptr[i].saddr == curr_fragment.saddr
-            && fragments_ptr[i].daddr == curr_fragment.daddr
-            && fragments_ptr[i].id == curr_fragment.id
-        ) {
-            return fragments_ptr[i].bitmap_ptr;
-        }
+//__u8 find_fragment(struct fragment* fragments_ptr, struct fragment curr_fragment, int fragments_counter)
+//{
+//    for (int i = 0; i < fragments_counter; i++) {
+//        if (fragments_ptr[i].protocol == curr_fragment.protocol
+//            && fragments_ptr[i].saddr == curr_fragment.saddr
+//            && fragments_ptr[i].daddr == curr_fragment.daddr
+//            && fragments_ptr[i].id == curr_fragment.id
+//        ) {
+//            return fragments_ptr[i].bitmap_ptr;
+//        }
+//    }
+//
+//    return 0;
+//}
+
+void add_fragment(fragment_t *first_fragment, struct fragment_data new_fragment) {
+    fragment_t *current = first_fragment;
+    while (current->next != NULL) {
+        current = current->next;
     }
 
-    return 0;
+    /* now we can add a new variable */
+    current->next = (fragment_t*)malloc(sizeof(fragment_t));
+    current->next->data = new_fragment;
+    current->next->next = NULL;
+    current->next->prev = current;
 }
 
 int main() {
@@ -156,9 +169,8 @@ int main() {
     struct arp_resp arp_response;
     struct ipv4_resp ipv4_response;
     struct iphdr recv_ipv4_header;
-    struct fragment *fragments_ptr = NULL;
-    struct fragment curr_fragment;
-    int fragments_counter = 0;
+    struct fragment_data curr_fragment;
+    fragment_t *fragments_ptr = NULL;
 
     fd = tun_alloc(if_name);
     sd = tun_config(if_name, address, subnet_mask);
@@ -195,7 +207,7 @@ int main() {
             // @todo if time ends, send ICMP time exceeded
             // Reassembling
             if (offset != 0 || more_fragments != 0) {
-                __u8 searching_fragment;
+//                __u8 searching_fragment;
                 curr_fragment.saddr = recv_ipv4_header.saddr;
                 curr_fragment.daddr = recv_ipv4_header.daddr;
                 curr_fragment.id = id;
@@ -204,12 +216,18 @@ int main() {
 
                 if (!fragments_ptr) {
                     printf("Initiated fragment pointer!\n");
-                    fragments_counter++;
-                    fragments_ptr = malloc(sizeof(struct fragment));
-                    memcpy(fragments_ptr, &curr_fragment, sizeof(curr_fragment));
-                } else if ((searching_fragment = find_fragment(fragments_ptr, curr_fragment, fragments_counter))) {
-                    printf("FRAGMENT FOUND: %d\n", searching_fragment);
+                    fragments_ptr = (fragment_t*)malloc(sizeof(fragment_t));
+                    add_fragment(fragments_ptr, curr_fragment);
                 }
+
+//                if (!fragments_ptr) {
+//                    printf("Initiated fragment pointer!\n");
+//                    fragments_counter++;
+//                    fragments_ptr = malloc(sizeof(struct fragment));
+//                    memcpy(fragments_ptr, &curr_fragment, sizeof(curr_fragment));
+//                } else if ((searching_fragment = find_fragment(fragments_ptr, curr_fragment, fragments_counter))) {
+//                    printf("FRAGMENT FOUND: %d\n", searching_fragment);
+//                }
             }
 
             printf("dont_fragment: %d\n", dont_fragment);

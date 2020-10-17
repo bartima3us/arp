@@ -34,14 +34,21 @@ struct ipv4_resp
     size_t length;
 } __attribute__ ((__packed__));
 
-struct fragment
+struct fragment_data
 {
     __be32	saddr;
     __be32	daddr;
     __be16	id;
     __u8	protocol;
-    __u8    bitmap_ptr;
+    __u8    bitmap_ptr; // Bitfield of existing bytes
 };
+
+typedef struct fragment
+{
+    struct fragment_data data;
+    struct fragment *next;
+    struct fragment *prev;
+} fragment_t;
 
 
 #endif //ARP_IPV4_H
