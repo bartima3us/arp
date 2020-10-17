@@ -141,7 +141,6 @@ void add_fragment(fragment_t *first_fragment, struct fragment_data new_fragment)
         current = current->next;
     }
 
-    /* now we can add a new variable */
     current->next = (fragment_t*)malloc(sizeof(fragment_t));
     current->next->data = new_fragment;
     current->next->next = NULL;
@@ -217,7 +216,9 @@ int main() {
                 if (!fragments_ptr) {
                     printf("Initiated fragment pointer!\n");
                     fragments_ptr = (fragment_t*)malloc(sizeof(fragment_t));
-                    add_fragment(fragments_ptr, curr_fragment);
+                    fragments_ptr->data = curr_fragment;
+                    fragments_ptr->prev = NULL;
+                    fragments_ptr->next = NULL;
                 }
 
 //                if (!fragments_ptr) {
